@@ -1,0 +1,13 @@
+# AI & Machine Learning
+scikit-learn
+pandas
+numpy
+joblib
+
+# Web Framework
+streamlit
+
+# Geospatial & Utilities
+geopy
+requests
+beautifulsoup4
