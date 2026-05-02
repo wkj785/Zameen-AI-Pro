@@ -19,7 +19,14 @@ if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
 st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
 init_db()
 
-# --- 2. THE ULTIMATE EMERALD UI CSS ---
+# --- 2. INITIALIZE SESSION STATE ---
+# Fixes AttributeError by ensuring these exist before the script runs logic
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'connected' not in st.session_state:
+    st.session_state.connected = False
+
+# --- 3. THE ULTIMATE EMERALD UI CSS ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -40,7 +47,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. ASSET LOADING & PULSE ---
+# --- 4. ASSET LOADING & PULSE ---
 class ZameenPulse:
     def get_live_market_avg(self, location, area_sqyd):
         try:
@@ -62,10 +69,7 @@ def load_assets():
 
 model, col_trans, locations = load_assets()
 
-# --- 4. HYBRID AUTHENTICATION (FINAL FIX) ---
-from streamlit_google_auth import Authenticate
-
-# We still keep the dictionary for the credentials
+# --- 5. HYBRID AUTHENTICATION (GOOGLE + MANUAL) ---
 google_secrets = {
     "web": {
         "client_id": st.secrets["GOOGLE_CLIENT_ID"],
@@ -75,31 +79,65 @@ google_secrets = {
     }
 }
 
-# The library is complaining that 'redirect_uri' is missing from __init__
 auth = Authenticate(
     secret_credentials_path=google_secrets,
     cookie_name='zameen_ai_pro_session',
     cookie_key=st.secrets["GOOGLE_CLIENT_SECRET"],
-    redirect_uri="https://zameen-ai-pro.streamlit.app", # Moved to top-level
+    redirect_uri="https://zameen-ai-pro.streamlit.app",
 )
 
 auth.check_authentification()
 
-# --- 5. SIDEBAR ---
+# Sync Google User Data to SQL DB
+if st.session_state.get('connected'):
+    if st.session_state.get('user_info'):
+        st.session_state.username = st.session_state['user_info'].get('email')
+        add_google_userdata(st.session_state.username)
+
+if not st.session_state.get('connected'):
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        st.markdown('<div style="margin-top: 5rem;"><p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Property Valuation</p></div>', unsafe_allow_html=True)
+        auth_tabs = st.tabs(["🌐 GOOGLE LOGIN", "📝 MANUAL ACCESS"])
+        
+        with auth_tabs[0]:
+            auth.login()
+            if st.session_state.get('connected'):
+                st.rerun()
+
+        with auth_tabs[1]:
+            u = st.text_input("Username", key="login_u")
+            p = st.text_input("Password", type="password", key="login_p")
+            col_btn1, col_btn2 = st.columns(2)
+            if col_btn1.button("🚀 LOGIN"):
+                if login_user(u, p):
+                    st.session_state.connected, st.session_state.username = True, u
+                    st.rerun()
+                else: st.error("Invalid Credentials")
+            if col_btn2.button("🆕 REGISTER"):
+                if add_userdata(u, p): st.success("Account created! Log in above.")
+                else: st.error("User already exists.")
+    st.stop()
+
+# --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown('<p class="sidebar-brand">Zameen AI Pro</p>', unsafe_allow_html=True)
-    if st.session_state.get('user_info'):
-        st.image(st.session_state['user_info'].get('picture'), width=70)
-        st.write(f"Welcome, {st.session_state['user_info'].get('name')}")
-    else:
-        st.write(f"User: {st.session_state.username}")
     
+    if st.session_state.username:
+        if st.session_state.get('user_info'):
+            st.image(st.session_state['user_info'].get('picture'), width=70)
+            st.write(f"Welcome, {st.session_state['user_info'].get('name')}")
+        else:
+            st.write(f"Logged in as: {st.session_state.username}")
+    
+    st.divider()
     if st.button("🚪 LOGOUT"):
         auth.logout()
         st.session_state.connected = False
+        st.session_state.username = None
         st.rerun()
 
-# --- 6. MAIN CONTENT ---
+# --- 7. MAIN CONTENT ---
 main_tab, hist_tab = st.tabs(["🚀 Predictor", "📜 History"])
 
 with main_tab:
@@ -114,7 +152,7 @@ with main_tab:
     
     if st.button("🚀 GENERATE HYBRID VALUATION"):
         try:
-            # Prepare data (aligned to 250 features as per your model)
+            # Model data preparation
             data = {'Location': [loc_name], 'Area': [area_sqyd], 'Baths': [baths], 'Beds': [beds],
                     'Dining Room': [0], 'Laundry Room': [0], 'Store Rooms': [0], 'Kitchens': [kitchens],
                     'Drawing Room': [1], 'Gym': [0], 'Powder Room': [0], 'Steam Room': [0],
@@ -139,8 +177,9 @@ with main_tab:
             st.error(f"Prediction Error: {e}")
 
 with hist_tab:
-    df = view_user_history(st.session_state.username)
-    if not df.empty:
-        st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
-    else:
-        st.info("No valuation history found. Try predicting a price first!")
+    if st.session_state.username:
+        df = view_user_history(st.session_state.username)
+        if not df.empty:
+            st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
+        else:
+            st.info("No valuation history found yet.")
