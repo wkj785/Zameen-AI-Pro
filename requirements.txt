@@ -4,6 +4,7 @@ pandas
 numpy
 joblib
 streamlit-google-auth
+workos
 # Web Framework
 streamlit
 
