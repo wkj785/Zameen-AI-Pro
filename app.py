@@ -62,26 +62,25 @@ def load_assets():
 
 model, col_trans, locations = load_assets()
 
-# --- 4. HYBRID AUTHENTICATION (FIXED) ---
+# --- 4. HYBRID AUTHENTICATION (FINAL FIX) ---
 from streamlit_google_auth import Authenticate
 
-# Create a dictionary structure that mimics the Google JSON file
-# This prevents the TypeError by giving the library exactly what it needs
+# We still keep the dictionary for the credentials
 google_secrets = {
     "web": {
         "client_id": st.secrets["GOOGLE_CLIENT_ID"],
         "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": ["https://zameen-ai-pro.streamlit.app"],
     }
 }
 
-# Initialize with the secret dict directly
+# The library is complaining that 'redirect_uri' is missing from __init__
 auth = Authenticate(
-    secret_credentials_path=google_secrets, # Pass the dict here
+    secret_credentials_path=google_secrets,
     cookie_name='zameen_ai_pro_session',
     cookie_key=st.secrets["GOOGLE_CLIENT_SECRET"],
+    redirect_uri="https://zameen-ai-pro.streamlit.app", # Moved to top-level
 )
 
 auth.check_authentification()
