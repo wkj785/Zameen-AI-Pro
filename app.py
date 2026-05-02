@@ -75,7 +75,7 @@ import os
 
 # --- 5. HYBRID AUTHENTICATION (GOOGLE + MANUAL) ---
 
-# 1. Structure your secrets into the format Google expects
+# 1. Map your Streamlit secrets to the structure Google requires
 google_secrets = {
     "web": {
         "client_id": st.secrets["GOOGLE_CLIENT_ID"],
@@ -85,13 +85,13 @@ google_secrets = {
     }
 }
 
-# 2. CREATE TEMPORARY FILE 
-# This converts your dictionary into a physical file path to satisfy the library
+# 2. THE FIX: Create a temporary JSON file path to satisfy the library
+# This satisfies the requirement for a 'str' or 'PathLike' object
 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
     json.dump(google_secrets, temp_file)
     temp_credentials_path = temp_file.name
 
-# 3. Initialize Authenticate using the PATH, not the dict
+# 3. Initialize Authenticate using the temporary file path
 auth = Authenticate(
     secret_credentials_path=temp_credentials_path, 
     cookie_name='zameen_ai_pro_session',
@@ -99,16 +99,16 @@ auth = Authenticate(
     redirect_uri="https://zameen-ai-pro.streamlit.app",
 )
 
+# 4. Check for existing session/cookie auth
 auth.check_authentification()
 
-# 4. Sync Google User Data to SQL DB
+# 5. Connect Google Identity to your Zameen database
 if st.session_state.get('connected'):
     if st.session_state.get('user_info'):
         st.session_state.username = st.session_state['user_info'].get('email')
-        # Ensure they are registered in your zameen_data.db
         add_google_userdata(st.session_state.username)
 
-# 5. Login UI Logic
+# 6. Login UI with Emerald Styling
 if not st.session_state.get('connected'):
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -130,8 +130,10 @@ if not st.session_state.get('connected'):
                     st.rerun()
                 else: st.error("Invalid Credentials")
             if col_btn2.button("🆕 REGISTER"):
-                if add_userdata(u, p): st.success("Account created! Log in above.")
-                else: st.error("User already exists.")
+                if add_userdata(u, p): 
+                    st.success("Account created! Log in above.")
+                else: 
+                    st.error("User already exists.")
     st.stop()
 
 # --- 6. SIDEBAR ---
