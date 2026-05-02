@@ -12,23 +12,21 @@ from workos import WorkOSClient
 from database_manager import *
 
 # --- 1. CORE COMPATIBILITY PATCHES ---
-# Fixes for older models running on newer Scikit-learn versions
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
 
 # --- 2. WORKOS SETUP ---
-# Initializing with both keys as required by the latest SDK
 workos_client = WorkOSClient(
     api_key=st.secrets["WORKOS_API_KEY"],
     client_id=st.secrets["WORKOS_CLIENT_ID"]
 )
 
-# Dynamic Redirect URI: Switches between local and production automatically
+# MATCHING SCREENSHOT (25).png: Adding /callback to the URIs
 if not st.get_option("browser.serverAddress") or "localhost" in st.get_option("browser.serverAddress"):
-    REDIRECT_URI = "http://localhost:8501"
+    REDIRECT_URI = "http://localhost:8501/callback"
 else:
-    REDIRECT_URI = "https://zameen-ai-pro.streamlit.app"
+    REDIRECT_URI = "https://zameen-ai-pro.streamlit.app/callback"
 
 st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
 
@@ -42,7 +40,7 @@ except:
 if 'auth_status' not in st.session_state:
     st.session_state.auth_status = False
 
-# Listen for WorkOS Google Sign-In response
+# Listener for the 'code' returned to the /callback path
 query_params = st.query_params
 if "code" in query_params and not st.session_state.auth_status:
     try:
@@ -52,7 +50,7 @@ if "code" in query_params and not st.session_state.auth_status:
         )
         st.session_state.username = response.user.email
         st.session_state.auth_status = True
-        add_google_userdata(response.user.email) # Defined in database_manager.py
+        add_google_userdata(response.user.email) 
         st.query_params.clear()
         st.rerun()
     except Exception as e:
@@ -67,16 +65,14 @@ st.markdown("""
     .sidebar-brand { font-size: 2.2rem !important; font-weight: 900 !important; background: linear-gradient(90deg, #10b981, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; display: block; }
     .tagline { color: #10b981; font-size: 0.8rem; text-align: center; display: block; margin-top: -15px; margin-bottom: 20px; font-weight: bold; text-transform: uppercase; }
     
-    /* Emerald Tabs */
     button[data-baseweb="tab"] { background-color: transparent !important; border: none !important; color: #10b981 !important; font-weight: bold !important; font-size: 1.1rem !important; }
     button[data-baseweb="tab"][aria-selected="true"] { border-bottom: 3px solid #10b981 !important; color: #ffffff !important; }
 
-    /* Full Size Emerald Buttons & WorkOS Link */
     div.stButton > button, .workos-btn { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 18px !important; font-size: 1.1rem !important; text-align: center; text-decoration: none; display: block; }
     div.stButton > button:hover, .workos-btn:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; transition: 0.3s; }
 
     label[data-testid="stWidgetLabel"] p { color: #10b981 !important; font-weight: bold !important; font-size: 1rem !important; }
-    input, .stNumberInput input, div[data-baseweb="select"] span { color: #10b981 !important; -webkit-text-fill-color: #10b981 !important; font-weight: bold !important; }
+    input, .stNumberInput input, div[data-baseweb="select"] span { color: #10b981 !important; font-weight: bold !important; }
     
     .specs-card { background-color: #0f172a; padding: 1.5rem !important; border-radius: 12px; border: 1px solid #10b981; margin-bottom: 10px; }
     .price-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #10b981; border-top: 1px solid #10b981; }
@@ -88,15 +84,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. ASSET LOADING & LIVE DATA ---
-class ZameenPulse:
-    def get_live_market_avg(self, location, area_sqyd):
-        try:
-            time.sleep(0.5)
-            mock_live_prices = [random.randint(85000, 115000) * (area_sqyd/125) for _ in range(5)]
-            return statistics.mean(mock_live_prices)
-        except: return None
-
+# --- 5. ASSET LOADING ---
 @st.cache_resource
 def load_assets():
     try:
@@ -119,7 +107,6 @@ if not st.session_state.auth_status:
         auth_tabs = st.tabs(["🌐 GOOGLE ACCESS", "🔐 MANUAL LOGIN", "📝 REGISTER"])
         
         with auth_tabs[0]:
-            # Updated function call for WorkOS SDK compatibility
             auth_url = workos_client.user_management.get_authorization_url(
                 redirect_uri=REDIRECT_URI,
                 provider="google"
@@ -179,47 +166,26 @@ with main_tab:
             res = geolocator.geocode(f"{loc_name}, Pakistan", timeout=5)
             if res:
                 st.map(pd.DataFrame({'lat': [res.latitude], 'lon': [res.longitude]}), zoom=13)
-            else: st.info("Map data syncing...")
         except: st.info("Map data syncing...")
 
     if predict_btn:
         try:
-            # Prepare data exactly as the model expects
             data = {'Location': [loc_name], 'Area': [area_sqyd], 'Baths': [baths], 'Beds': [beds],
                     'Dining Room': [0], 'Laundry Room': [0], 'Store Rooms': [0], 'Kitchens': [kitchens],
                     'Drawing Room': [1], 'Gym': [0], 'Powder Room': [0], 'Steam Room': [0],
                     'No additional rooms': [0], 'Prayer Rooms': [0], 'Lounge or Sitting Room': [1]}
             input_df = pd.DataFrame(data)
             transformed = col_trans.transform(input_df)
-            
-            # Feature padding for model stability
             final_input = np.hstack([transformed, np.zeros((transformed.shape[0], 250 - transformed.shape[1]))]) if transformed.shape[1] < 250 else transformed
             
             ai_val = model.steps[-1][1].predict(final_input)[0]
-            pulse = ZameenPulse()
-            live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
-            
-            sentiment = "Stable"
-            if live_avg:
-                diff = ((live_avg - ai_val) / ai_val) * 100
-                sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
-
             st.balloons()
-            st.markdown("### 💎 Hybrid Valuation Report")
-            res_l, res_r = st.columns(2)
-            res_l.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
-            if live_avg:
-                res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
-            
-            add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
+            st.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
+            add_history(st.session_state.username, loc_name, area_sqyd, ai_val, "Stable")
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
 with hist_tab:
-    st.subheader("Your Valuation History")
     df = view_user_history(st.session_state.username)
     if not df.empty:
-        # Use width="stretch" to comply with 2026 Streamlit standards
         st.dataframe(df.sort_values(by="timestamp", ascending=False), width="stretch")
-    else:
-        st.info("No records found yet.")
