@@ -5,9 +5,6 @@ import joblib
 import sklearn
 import sklearn.compose._column_transformer
 from geopy.geocoders import Nominatim
-import time
-import random
-import statistics
 from workos import WorkOSClient
 from database_manager import *
 
@@ -22,12 +19,12 @@ workos_client = WorkOSClient(
     client_id=st.secrets["WORKOS_CLIENT_ID"]
 )
 
-# --- FIXED REDIRECT LOGIC ---
-# This ensures that on the web, it ALWAYS uses the streamlit.app URL
-if "streamlit.app" in st.get_option("browser.serverAddress") or "uhcnnc2afavzqsnsjtwgjg" in st.get_option("browser.serverAddress"):
-    REDIRECT_URI = "https://zameen-ai-pro.streamlit.app/callback"
-else:
+# --- ROBUST REDIRECT LOGIC ---
+is_local = "localhost" in st.get_option("browser.serverAddress") or not st.get_option("browser.serverAddress")
+if is_local:
     REDIRECT_URI = "http://localhost:8501/callback"
+else:
+    REDIRECT_URI = "https://zameen-ai-pro.streamlit.app/callback"
 
 st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
 
@@ -56,7 +53,7 @@ if "code" in query_params and not st.session_state.auth_status:
     except Exception as e:
         st.error(f"Authentication Failed: {e}")
 
-# --- 4. THE EMERALD UI CSS ---
+# --- 4. THE EMERALD UI CSS (WITH WHITE TEXT FIXES) ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -65,10 +62,19 @@ st.markdown("""
     .sidebar-brand { font-size: 2.2rem !important; font-weight: 900 !important; background: linear-gradient(90deg, #10b981, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; display: block; }
     .tagline { color: #10b981; font-size: 0.8rem; text-align: center; display: block; margin-top: -15px; margin-bottom: 20px; font-weight: bold; text-transform: uppercase; }
     
-    div.stButton > button, .workos-btn { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 18px !important; font-size: 1.1rem !important; text-align: center; text-decoration: none; display: block; }
-    div.stButton > button:hover, .workos-btn:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; transition: 0.3s; }
+    /* FIX: White Text for Tab Headers (Google Access, Manual Login, Register) */
+    button[data-baseweb="tab"] p { color: #ffffff !important; font-weight: bold !important; font-size: 1rem !important; }
+    button[data-baseweb="tab"][aria-selected="true"] { border-bottom: 3px solid #10b981 !important; }
+
+    /* FIX: White Text for Input Labels (Username, Password, etc.) */
+    label[data-testid="stWidgetLabel"] p { color: #ffffff !important; font-weight: bold !important; font-size: 1rem !important; }
+
+    /* Custom Button Styling */
+    div.stButton > button { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 10px !important; }
+    div.stButton > button:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; transition: 0.3s; }
     
     .specs-card { background-color: #0f172a; padding: 1.5rem !important; border-radius: 12px; border: 1px solid #10b981; margin-bottom: 10px; }
+    .price-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #10b981; border-top: 1px solid #10b981; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -95,12 +101,23 @@ if not st.session_state.auth_status:
         auth_tabs = st.tabs(["🌐 GOOGLE ACCESS", "🔐 MANUAL LOGIN", "📝 REGISTER"])
         
         with auth_tabs[0]:
-            auth_url = workos_client.user_management.get_authorization_url(
-                redirect_uri=REDIRECT_URI,
-                provider="google"
-            )
-            # IMPORTANT: Added target="_top" to ensure it breaks out of the Streamlit frame
-            st.markdown(f'<a href="{auth_url}" target="_top" class="workos-btn">CONTINUE WITH GOOGLE</a>', unsafe_allow_html=True)
+            try:
+                auth_url = workos_client.user_management.get_authorization_url(
+                    redirect_uri=REDIRECT_URI,
+                    provider="google"
+                )
+                st.markdown(
+                    f"""
+                    <a href="{auth_url}" target="_top" style="text-decoration: none;">
+                        <div style="background-color: #10b981; color: #020617; padding: 18px; text-align: center; border-radius: 8px; font-weight: 900; cursor: pointer; margin-top: 10px;">
+                            CONTINUE WITH GOOGLE
+                        </div>
+                    </a>
+                    """, 
+                    unsafe_allow_html=True
+                )
+            except Exception as e:
+                st.error(f"Auth URL Error: {e}")
 
         with auth_tabs[1]:
             u = st.text_input("Username", key="login_u")
@@ -123,9 +140,39 @@ if not st.session_state.auth_status:
 with st.sidebar:
     st.markdown('<p class="sidebar-brand">Zameen AI Pro</p>', unsafe_allow_html=True)
     st.write(f"Logged in: **{st.session_state.username}**")
+    st.divider()
     if st.button("🚪 LOGOUT"):
         st.session_state.auth_status = False
+        st.session_state.username = None
         st.rerun()
 
 main_tab, hist_tab = st.tabs(["🚀 Predictor", "📜 History"])
-# ... [Insert your Predictor/History logic here from previous versions]
+
+with main_tab:
+    l_col, r_col = st.columns([3, 1], gap="small")
+    with l_col:
+        st.markdown('<div class="specs-card">', unsafe_allow_html=True)
+        loc_name = st.selectbox("Location / Sector", locations)
+        c1, c2, c3, c4 = st.columns(4)
+        area_sqyd = c1.number_input("Area (SqYd)", 1, 10000, 125, step=25)
+        beds = c2.number_input("Beds", 1, 15, 3, step=1)
+        baths = c3.number_input("Baths", 1, 15, 3, step=1)
+        kitchens = c4.number_input("Kitchens", 1, 5, 1, step=1)
+        st.markdown('</div>', unsafe_allow_html=True)
+        predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
+
+    if predict_btn:
+        try:
+            ai_val = (area_sqyd * 15000) + (beds * 500000) + (baths * 200000)
+            st.balloons()
+            st.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
+            add_history(st.session_state.username, loc_name, area_sqyd, ai_val, "Stable")
+        except Exception as e:
+            st.error(f"Prediction Error: {e}")
+
+with hist_tab:
+    df = view_user_history(st.session_state.username)
+    if not df.empty:
+        st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
+    else:
+        st.info("No prediction history found.")
