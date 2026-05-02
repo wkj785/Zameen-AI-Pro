@@ -1,40 +1,44 @@
 import sqlite3
-import hashlib
 import pandas as pd
+import hashlib
 from datetime import datetime
 
-# --- SECURITY FUNCTIONS ---
+# --- 1. SECURITY UTILS ---
 def make_hashes(password):
-    """Encrypts a plain text password using SHA-256."""
+    """Encodes password for secure storage."""
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
-    """Compares a plain text password with a stored hash."""
+    """Verifies a password against its stored hash."""
     if make_hashes(password) == hashed_text:
         return hashed_text
     return False
 
-# --- DATABASE CORE ---
+# --- 2. DATABASE INITIALIZATION ---
 def init_db():
-    """Initializes the database and creates necessary tables."""
+    """Initializes the SQLite database with required tables."""
     conn = sqlite3.connect('zameen_data.db')
     c = conn.cursor()
-    # User table stores both manual and Google users
-    c.execute('CREATE TABLE IF NOT EXISTS userstable(username TEXT PRIMARY KEY, password TEXT)')
-    # History table tracks every valuation generated
-    c.execute('''CREATE TABLE IF NOT EXISTS historytable(
-                 username TEXT, 
-                 timestamp TEXT, 
-                 location TEXT, 
-                 area REAL, 
-                 price REAL, 
-                 sentiment TEXT)''')
+    
+    # Table for manual and Google users
+    c.execute('''CREATE TABLE IF NOT EXISTS userstable (
+                    username TEXT PRIMARY KEY, 
+                    password TEXT)''')
+    
+    # Table for property valuation logs
+    c.execute('''CREATE TABLE IF NOT EXISTS historytable (
+                    username TEXT, 
+                    location TEXT, 
+                    area REAL, 
+                    price REAL, 
+                    sentiment TEXT, 
+                    timestamp TEXT)''')
     conn.commit()
     conn.close()
 
-# --- USER MANAGEMENT ---
+# --- 3. USER MANAGEMENT ---
 def add_userdata(username, password):
-    """Registers a new manual user with a hashed password."""
+    """Adds a new manual user with a hashed password."""
     conn = sqlite3.connect('zameen_data.db')
     c = conn.cursor()
     try:
@@ -43,54 +47,51 @@ def add_userdata(username, password):
         conn.commit()
         return True
     except sqlite3.IntegrityError:
-        return False
+        return False # User already exists
     finally:
         conn.close()
 
-def add_google_userdata(username):
+def add_google_userdata(email):
     """
-    Registers a Google user automatically upon login.
-    Uses 'GOOGLE_AUTH' as a placeholder to prevent manual login bypass.
+    Registers a Google user if they don't exist.
+    Uses a placeholder password as they authenticate via Google.
     """
     conn = sqlite3.connect('zameen_data.db')
     c = conn.cursor()
-    try:
-        # INSERT OR IGNORE ensures we don't get errors for returning users
-        c.execute('INSERT OR IGNORE INTO userstable(username, password) VALUES (?,?)', 
-                  (username, 'GOOGLE_AUTH'))
+    # Check if user exists first to avoid overwriting manual accounts
+    c.execute('SELECT * FROM userstable WHERE username = ?', (email,))
+    if not c.fetchone():
+        c.execute('INSERT INTO userstable(username, password) VALUES (?,?)', 
+                  (email, 'GOOGLE_AUTH_USER'))
         conn.commit()
-        return True
-    except sqlite3.Error:
-        return False
-    finally:
-        conn.close()
+    conn.close()
 
 def login_user(username, password):
-    """Validates credentials for manual login."""
+    """Validates login credentials for manual access."""
     conn = sqlite3.connect('zameen_data.db')
     c = conn.cursor()
-    c.execute('SELECT password FROM userstable WHERE username =?', (username,))
-    data = c.fetchone()
+    c.execute('SELECT * FROM userstable WHERE username = ? AND password = ?', 
+              (username, make_hashes(password)))
+    data = c.fetchall()
     conn.close()
-    if data:
-        return check_hashes(password, data[0])
-    return False
+    return data
 
-# --- HISTORY TRACKING ---
+# --- 4. HISTORY TRACKING ---
 def add_history(username, location, area, price, sentiment):
-    """Saves a property valuation record to the history table."""
+    """Logs a successful property valuation."""
     conn = sqlite3.connect('zameen_data.db')
     c = conn.cursor()
-    timestamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    c.execute('INSERT INTO historytable VALUES (?,?,?,?,?,?)', 
-              (username, timestamp, location, area, price, sentiment))
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute('''INSERT INTO historytable(username, location, area, price, sentiment, timestamp) 
+                 VALUES (?,?,?,?,?,?)''', 
+              (username, location, area, price, sentiment, timestamp))
     conn.commit()
     conn.close()
 
 def view_user_history(username):
     """Retrieves all past valuations for a specific user as a DataFrame."""
     conn = sqlite3.connect('zameen_data.db')
-    query = "SELECT timestamp, location, area, price, sentiment FROM historytable WHERE username=?"
-    df = pd.read_sql_query(query, conn, params=(username,))
+    query = 'SELECT location, area, price, sentiment, timestamp FROM historytable WHERE username = ?'
+    df = pd.read_sql(query, conn, params=(username,))
     conn.close()
     return df
