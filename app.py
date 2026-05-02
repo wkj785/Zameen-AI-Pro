@@ -4,27 +4,36 @@ import numpy as np
 import joblib
 import sklearn
 import sklearn.compose._column_transformer
-from geopy.geocoders import Nominatim
 import time
 import random
 import statistics
+import json
+import tempfile
+import os
 from streamlit_google_auth import Authenticate
 from database_manager import *
 
 # --- 1. CORE COMPATIBILITY PATCHES ---
+# Ensures Sklearn objects loaded from older versions don't crash
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
 
 st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
-init_db()
+
+# Initialize Database
+try:
+    init_db()
+except Exception as e:
+    st.error(f"Database Initialization Failed: {e}")
 
 # --- 2. INITIALIZE SESSION STATE ---
-# Fixes AttributeError by ensuring these exist before the script runs logic
 if 'username' not in st.session_state:
     st.session_state.username = None
 if 'connected' not in st.session_state:
     st.session_state.connected = False
+if 'user_info' not in st.session_state:
+    st.session_state.user_info = None
 
 # --- 3. THE ULTIMATE EMERALD UI CSS ---
 st.markdown("""
@@ -51,6 +60,7 @@ st.markdown("""
 class ZameenPulse:
     def get_live_market_avg(self, location, area_sqyd):
         try:
+            # Simulated real-time market data API call
             mock_live_prices = [random.randint(85000, 115000) * (area_sqyd/125) for _ in range(5)]
             return statistics.mean(mock_live_prices)
         except: return None
@@ -59,23 +69,24 @@ class ZameenPulse:
 def load_assets():
     try:
         model = joblib.load('house_price_model.joblib')
+        # Attempt to find the column transformer and encoder for location mapping
         col_trans = next(step for step in model.named_steps.values() if isinstance(step, sklearn.compose.ColumnTransformer))
+        
+        # Patching transformer if needed
         if not hasattr(col_trans, '_name_to_fitted_passthrough'):
             col_trans._name_to_fitted_passthrough = {}
+            
         encoder = next(trans[1] for trans in col_trans.transformers_ if 'OneHotEncoder' in str(type(trans[1])))
         return model, col_trans, list(encoder.categories_[0])
-    except: 
-        return None, None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
+    except Exception as e: 
+        st.warning(f"Using default locations. Model error: {e}")
+        return None, None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad", "E-11", "G-11"]
 
 model, col_trans, locations = load_assets()
 
-import json
-import tempfile
-import os
-
 # --- 5. HYBRID AUTHENTICATION (GOOGLE + MANUAL) ---
 
-# 1. Map your Streamlit secrets to the structure Google requires
+# Constructing secrets dictionary for Google
 google_secrets = {
     "web": {
         "client_id": st.secrets["GOOGLE_CLIENT_ID"],
@@ -85,13 +96,12 @@ google_secrets = {
     }
 }
 
-# 2. THE FIX: Create a temporary JSON file path to satisfy the library
-# This satisfies the requirement for a 'str' or 'PathLike' object
+# Fix for "TypeError: expected str, bytes... not dict"
+# Create a temporary file to hold the JSON secrets
 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
     json.dump(google_secrets, temp_file)
     temp_credentials_path = temp_file.name
 
-# 3. Initialize Authenticate using the temporary file path
 auth = Authenticate(
     secret_credentials_path=temp_credentials_path, 
     cookie_name='zameen_ai_pro_session',
@@ -99,16 +109,20 @@ auth = Authenticate(
     redirect_uri="https://zameen-ai-pro.streamlit.app",
 )
 
-# 4. Check for existing session/cookie auth
+# Delete temporary file after loading (clean up)
+try:
+    os.unlink(temp_credentials_path)
+except: pass
+
 auth.check_authentification()
 
-# 5. Connect Google Identity to your Zameen database
+# Handle Post-Login logic
 if st.session_state.get('connected'):
     if st.session_state.get('user_info'):
         st.session_state.username = st.session_state['user_info'].get('email')
         add_google_userdata(st.session_state.username)
 
-# 6. Login UI with Emerald Styling
+# Blocking Login Screen
 if not st.session_state.get('connected'):
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -143,9 +157,9 @@ with st.sidebar:
     if st.session_state.username:
         if st.session_state.get('user_info'):
             st.image(st.session_state['user_info'].get('picture'), width=70)
-            st.write(f"Welcome, {st.session_state['user_info'].get('name')}")
+            st.write(f"Welcome, **{st.session_state['user_info'].get('name')}**")
         else:
-            st.write(f"Logged in as: {st.session_state.username}")
+            st.write(f"👤 **{st.session_state.username}**")
     
     st.divider()
     if st.button("🚪 LOGOUT"):
@@ -168,35 +182,45 @@ with main_tab:
     st.markdown('</div>', unsafe_allow_html=True)
     
     if st.button("🚀 GENERATE HYBRID VALUATION"):
-        try:
-            # Model data preparation
-            data = {'Location': [loc_name], 'Area': [area_sqyd], 'Baths': [baths], 'Beds': [beds],
+        if model:
+            try:
+                # Prepare data to match training feature set exactly
+                data = {
+                    'Location': [loc_name], 'Area': [area_sqyd], 'Baths': [baths], 'Beds': [beds],
                     'Dining Room': [0], 'Laundry Room': [0], 'Store Rooms': [0], 'Kitchens': [kitchens],
                     'Drawing Room': [1], 'Gym': [0], 'Powder Room': [0], 'Steam Room': [0],
-                    'No additional rooms': [0], 'Prayer Rooms': [0], 'Lounge or Sitting Room': [1]}
-            input_df = pd.DataFrame(data)
-            transformed = col_trans.transform(input_df)
-            final_input = np.hstack([transformed, np.zeros((1, 250 - transformed.shape[1]))])
-            
-            ai_val = model.steps[-1][1].predict(final_input)[0]
-            live_avg = ZameenPulse().get_live_market_avg(loc_name, area_sqyd)
-            
-            st.balloons()
-            st.markdown("### 💎 Hybrid Valuation Report")
-            res_l, res_r = st.columns(2)
-            res_l.markdown(f'<div class="price-card"><small>AI VALUATION</small><h2>PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
-            if live_avg:
-                sentiment = "Hot" if live_avg > ai_val else "Stable"
-                res_r.markdown(f'<div class="live-card"><small>LIVE PULSE</small><h2>PKR {int(live_avg):,}</h2><p>{sentiment} Market</p></div>', unsafe_allow_html=True)
-            
-            add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment if live_avg else "Stable")
-        except Exception as e:
-            st.error(f"Prediction Error: {e}")
+                    'No additional rooms': [0], 'Prayer Rooms': [0], 'Lounge or Sitting Room': [1]
+                }
+                input_df = pd.DataFrame(data)
+                
+                # Perform AI Prediction
+                ai_val = model.predict(input_df)[0]
+                
+                # Get Live Market Sentiment
+                live_avg = ZameenPulse().get_live_market_avg(loc_name, area_sqyd)
+                sentiment = "Stable"
+                if live_avg:
+                    sentiment = "Hot" if live_avg > ai_val else "Stable"
+
+                st.balloons()
+                st.markdown("### 💎 Hybrid Valuation Report")
+                res_l, res_r = st.columns(2)
+                res_l.markdown(f'<div class="price-card"><small>AI VALUATION</small><h2>PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
+                
+                if live_avg:
+                    res_r.markdown(f'<div class="live-card"><small>LIVE PULSE</small><h2>PKR {int(live_avg):,}</h2><p>{sentiment} Market</p></div>', unsafe_allow_html=True)
+                
+                # Save to Database
+                add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
+            except Exception as e:
+                st.error(f"Prediction Error: {e}")
+        else:
+            st.error("Model not loaded. Please check if house_price_model.joblib exists.")
 
 with hist_tab:
     if st.session_state.username:
-        df = view_user_history(st.session_state.username)
-        if not df.empty:
-            st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
+        history_df = view_user_history(st.session_state.username)
+        if not history_df.empty:
+            st.dataframe(history_df.sort_values(by="timestamp", ascending=False), use_container_width=True)
         else:
-            st.info("No valuation history found yet.")
+            st.info("No valuation history found yet. Try predicting a property price!")
