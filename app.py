@@ -8,15 +8,53 @@ from geopy.geocoders import Nominatim
 import time
 import random
 import statistics
-from database_manager import * # --- 1. CORE COMPATIBILITY PATCHES ---
+from workos import WorkOSClient
+from database_manager import *
+
+# --- 1. CORE COMPATIBILITY PATCHES ---
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
 
-st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
-init_db()
+# --- 2. WORKOS SETUP ---
+workos_client = WorkOSClient(api_key=st.secrets["WORKOS_API_KEY"])
+CLIENT_ID = st.secrets["WORKOS_CLIENT_ID"]
 
-# --- 2. THE ULTIMATE EMERALD UI CSS ---
+# Dynamic Redirect URI logic
+if not st.get_option("browser.serverAddress") or "localhost" in st.get_option("browser.serverAddress"):
+    REDIRECT_URI = "http://localhost:8501"
+else:
+    REDIRECT_URI = "https://zameen-ai-pro.streamlit.app"
+
+st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
+
+# Initialize DB
+try:
+    init_db()
+except:
+    pass
+
+# --- 3. SESSION STATE & CALLBACK HANDLING ---
+if 'auth_status' not in st.session_state:
+    st.session_state.auth_status = False
+
+# Handle WorkOS Redirect Callback
+query_params = st.query_params
+if "code" in query_params and not st.session_state.auth_status:
+    try:
+        response = workos_client.user_management.authenticate_with_code(
+            client_id=CLIENT_ID,
+            code=query_params["code"],
+        )
+        st.session_state.username = response.user.email
+        st.session_state.auth_status = True
+        add_google_userdata(response.user.email) # Sync with your DB
+        st.query_params.clear()
+        st.rerun()
+    except Exception as e:
+        st.error(f"Auth Error: {e}")
+
+# --- 4. THE EMERALD UI CSS ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -30,8 +68,8 @@ st.markdown("""
     button[data-baseweb="tab"][aria-selected="true"] { border-bottom: 3px solid #10b981 !important; color: #ffffff !important; }
 
     /* Full Size Emerald Buttons */
-    div.stButton > button { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 18px !important; font-size: 1.1rem !important; }
-    div.stButton > button:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; }
+    div.stButton > button, .workos-btn { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 18px !important; font-size: 1.1rem !important; text-align: center; text-decoration: none; display: block; }
+    div.stButton > button:hover, .workos-btn:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; }
 
     label[data-testid="stWidgetLabel"] p { color: #10b981 !important; font-weight: bold !important; font-size: 1rem !important; }
     input, .stNumberInput input, div[data-baseweb="select"] span { color: #10b981 !important; -webkit-text-fill-color: #10b981 !important; font-weight: bold !important; }
@@ -40,14 +78,13 @@ st.markdown("""
     .price-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #10b981; border-top: 1px solid #10b981; min-height: 120px; }
     .live-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #ffffff; border-top: 1px solid #ffffff; min-height: 120px; }
     
-    /* Area Converter Styling */
     .conv-box { background: #0f172a; border: 1px solid #10b981; border-radius: 12px; padding: 15px; margin-top: 10px; text-align: center; }
     .conv-label { color: #10b981; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
     .conv-val { color: white; font-size: 1.2rem; font-weight: 900; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SCRAPER & ASSET LOADING ---
+# --- 5. ASSET LOADING & LOGIC ---
 class ZameenPulse:
     def get_live_market_avg(self, location, area_sqyd):
         try:
@@ -61,11 +98,8 @@ def load_assets():
     try:
         model = joblib.load('house_price_model.joblib')
         col_trans = next(step for step in model.named_steps.values() if isinstance(step, sklearn.compose.ColumnTransformer))
-        
-        # Patch for '_name_to_fitted_passthrough' error
         if not hasattr(col_trans, '_name_to_fitted_passthrough'):
             col_trans._name_to_fitted_passthrough = {}
-            
         encoder = next(trans[1] for trans in col_trans.transformers_ if 'OneHotEncoder' in str(type(trans[1])))
         return model, col_trans, list(encoder.categories_[0])
     except: 
@@ -73,16 +107,22 @@ def load_assets():
 
 model, col_trans, locations = load_assets()
 
-# --- 4. AUTHENTICATION ---
-if 'auth_status' not in st.session_state:
-    st.session_state.auth_status = False
-
+# --- 6. AUTHENTICATION UI ---
 if not st.session_state.auth_status:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown('<div style="margin-top: 5rem;"><p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Property Valuation</p></div>', unsafe_allow_html=True)
-        auth_tabs = st.tabs(["🔐 LOGIN", "📝 REGISTER"])
+        st.markdown('<div style="margin-top: 5rem;"><p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">Hybrid Intelligence Valuation</p></div>', unsafe_allow_html=True)
+        auth_tabs = st.tabs(["🌐 GOOGLE ACCESS", "🔐 MANUAL LOGIN", "📝 REGISTER"])
+        
         with auth_tabs[0]:
+            auth_url = workos_client.user_management.get_authorization_url(
+                redirect_uri=REDIRECT_URI,
+                client_id=CLIENT_ID,
+                provider="google"
+            )
+            st.markdown(f'<a href="{auth_url}" target="_self" class="workos-btn">CONTINUE WITH GOOGLE</a>', unsafe_allow_html=True)
+
+        with auth_tabs[1]:
             u = st.text_input("Username", key="login_u")
             p = st.text_input("Password", type="password", key="login_p")
             if st.button("🚀 ENTER DASHBOARD"):
@@ -90,7 +130,8 @@ if not st.session_state.auth_status:
                     st.session_state.auth_status, st.session_state.username = True, u
                     st.rerun()
                 else: st.error("Invalid Credentials")
-        with auth_tabs[1]:
+        
+        with auth_tabs[2]:
             nu = st.text_input("New Username", key="reg_u")
             npw = st.text_input("New Password", type="password", key="reg_p")
             if st.button("🆕 CREATE ACCOUNT"):
@@ -98,9 +139,10 @@ if not st.session_state.auth_status:
                 else: st.error("User already exists.")
     st.stop()
 
-# --- 5. SIDEBAR ---
+# --- 7. DASHBOARD SIDEBAR ---
 with st.sidebar:
-    st.markdown('<p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Property Valuation</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Valuation</p>', unsafe_allow_html=True)
+    st.write(f"Logged in: **{st.session_state.username}**")
     st.divider()
     st.markdown('<p style="color:#10b981; font-weight:bold; font-size:0.9rem; text-align:center;">⚖️ AREA CONVERTER</p>', unsafe_allow_html=True)
     side_sqyd = st.number_input("Enter SqYd", value=125, step=25, label_visibility="collapsed")
@@ -110,7 +152,7 @@ with st.sidebar:
         st.session_state.auth_status = False
         st.rerun()
 
-# --- 6. MAIN CONTENT ---
+# --- 8. MAIN CONTENT ---
 main_tab, hist_tab = st.tabs(["🚀 Predictor", "📜 History"])
 
 with main_tab:
@@ -127,16 +169,13 @@ with main_tab:
         predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
 
     with r_col:
-        # Restore Live Map View
-        geolocator = Nominatim(user_agent="ZameenAI_Pro")
+        geolocator = Nominatim(user_agent="ZameenAI_Pro_v2")
         try:
             res = geolocator.geocode(f"{loc_name}, Pakistan", timeout=5)
             if res:
                 st.map(pd.DataFrame({'lat': [res.latitude], 'lon': [res.longitude]}), zoom=13)
-            else:
-                st.info("Map data unavailable for this location.")
-        except:
-            st.info("Syncing location...")
+            else: st.info("Map data syncing...")
+        except: st.info("Map data syncing...")
 
     if predict_btn:
         try:
@@ -147,7 +186,7 @@ with main_tab:
             input_df = pd.DataFrame(data)
             transformed = col_trans.transform(input_df)
             
-            # Align features for model (padding to 250 features)
+            # Align features
             final_input = np.hstack([transformed, np.zeros((transformed.shape[0], 250 - transformed.shape[1]))]) if transformed.shape[1] < 250 else transformed
             
             ai_val = model.steps[-1][1].predict(final_input)[0]
@@ -173,4 +212,4 @@ with main_tab:
 with hist_tab:
     df = view_user_history(st.session_state.username)
     if not df.empty:
-        st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
+        st.dataframe(df.sort_values(by="timestamp", ascending=False), width="stretch")
