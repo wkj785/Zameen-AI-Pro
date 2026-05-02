@@ -96,7 +96,7 @@ auth = Authenticate(
     secret_credentials_path=temp_credentials_path, 
     cookie_name='zameen_ai_pro_session',
     cookie_key=st.secrets["GOOGLE_CLIENT_SECRET"],
-    redirect_uri="https://zameen-ai-pro.streamlit.app",
+    redirect_uri="https://zameen-ai-pro-uhcnnc2afavzqsnsjtwgjg.streamlit.app/",
 )
 
 auth.check_authentification()
