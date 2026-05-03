@@ -26,7 +26,7 @@ else:
 
 st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
 
-# --- 3. THE EMERALD UI CSS (COMPLETE OVERRIDE) ---
+# --- 3. THE EMERALD UI CSS ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -37,32 +37,28 @@ st.markdown("""
     .sidebar-brand { font-size: 2.2rem !important; font-weight: 900 !important; background: linear-gradient(90deg, #10b981, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: block; text-align: center; margin-bottom: 0px; }
     .tagline { color: #10b981; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; display: block; margin-top: -10px; margin-bottom: 30px; }
     
-    /* Tab Styling (Predictor/History) */
+    /* Tab Styling */
     button[data-baseweb="tab"] p { color: #ffffff !important; font-size: 18px !important; font-weight: 700 !important; }
     button[data-baseweb="tab"][aria-selected="true"] { border-bottom: 4px solid #10b981 !important; background: rgba(16, 185, 129, 0.1); }
 
-    /* Apply Emerald to ALL Input Labels */
-    label[data-testid="stWidgetLabel"] p { color: #10b981 !important; font-weight: 800 !important; text-transform: uppercase; font-size: 0.9rem; margin-bottom: 5px; }
+    /* Apply Emerald to ALL Input Labels & Widgets */
+    label[data-testid="stWidgetLabel"] p { color: #10b981 !important; font-weight: 800 !important; text-transform: uppercase; font-size: 0.9rem; }
     
-    /* Input Boxes (Location, Area, Number Inputs) */
     div[data-baseweb="select"], div[data-baseweb="input"], div[data-baseweb="base-input"], .stNumberInput {
-        border: 2px solid #10b981 !important; border-radius: 10px !important; background-color: #0f172a !important; color: white !important;
+        border: 2px solid #10b981 !important; border-radius: 10px !important; background-color: #0f172a !important;
     }
     
-    /* Emerald Button Customization */
+    /* Emerald Button */
     div.stButton > button { 
         background-color: transparent !important; color: #10b981 !important; 
         border: 2px solid #10b981 !important; border-radius: 10px; font-weight: 900 !important; 
-        text-transform: uppercase; width: 100% !important; padding: 15px !important; transition: 0.4s;
+        width: 100% !important; padding: 15px !important; transition: 0.4s;
     }
     div.stButton > button:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 25px #10b981; }
     
     /* Emerald Cards for Modules */
-    .module-card { background-color: #0f172a; padding: 25px; border-radius: 15px; border: 1px solid #10b981; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .module-card { background-color: #0f172a; padding: 25px; border-radius: 15px; border: 1px solid #10b981; margin-bottom: 20px; }
     .price-display { background: #0f172a; padding: 20px; border-radius: 12px; border-left: 10px solid #10b981; border-top: 1px solid #10b981; margin-top: 20px; }
-    
-    /* Converter Specific Styling */
-    .converter-box { background: #1e293b; padding: 15px; border-radius: 8px; border: 1px dashed #10b981; margin-top: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -74,24 +70,18 @@ with st.sidebar:
     st.divider()
     
     st.markdown("### 📏 Area Converter")
-    with st.container():
-        st.markdown('<div class="converter-box">', unsafe_allow_html=True)
-        c_val = st.number_input("Value", value=1.0, key="conv_val")
-        c_type = st.selectbox("From", ["Marlas to SqYd", "Kanals to SqYd", "SqYd to Marlas"], key="conv_type")
-        
-        if c_type == "Marlas to SqYd":
-            res = c_val * 30.25
-            st.success(f"{c_val} Marla = {res:.2f} SqYd")
-        elif c_type == "Kanals to SqYd":
-            res = c_val * 605.0
-            st.success(f"{c_val} Kanal = {res:.2f} SqYd")
-        elif c_type == "SqYd to Marlas":
-            res = c_val / 30.25
-            st.success(f"{c_val} SqYd = {res:.2f} Marlas")
-        st.markdown('</div>', unsafe_allow_html=True)
+    c_val = st.number_input("Value", value=1.0)
+    c_type = st.selectbox("From", ["Marlas to SqYd", "Kanals to SqYd", "SqYd to Marlas"])
+    
+    if c_type == "Marlas to SqYd":
+        st.success(f"Result: {c_val * 30.25:.2f} SqYd")
+    elif c_type == "Kanals to SqYd":
+        st.success(f"Result: {c_val * 605.0:.2f} SqYd")
+    elif c_type == "SqYd to Marlas":
+        st.success(f"Result: {c_val / 30.25:.2f} Marlas")
     
     st.divider()
-    if st.button("🚪 LOGOUT SESSION"):
+    if st.button("🚪 LOGOUT"):
         st.session_state.auth_status = False
         st.rerun()
 
@@ -105,34 +95,23 @@ with main_tab:
     with top_col1:
         st.markdown('<div class="module-card">', unsafe_allow_html=True)
         st.markdown("### 📊 Market Sentiment")
-        st.write("Current Trend: **Bullish**")
+        st.write("Trend: **Bullish**")
         st.progress(82)
-        st.caption("Market Activity: High Demand")
-        st.markdown("""
-            * **Volatility:** 4.2% (Low)
-            * **Demand Index:** 8.9/10
-            * **Sentiment:** Positive
-        """)
+        st.caption("High demand in Islamabad Capital territory.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with top_col2:
         st.markdown('<div class="module-card">', unsafe_allow_html=True)
         st.markdown("### 📍 Live Sector Analytics")
-        # Center map on Islamabad coordinates
         map_data = pd.DataFrame({'lat': [33.6844], 'lon': [73.0479]})
-        st.map(map_data, zoom=12, use_container_width=True)
+        st.map(map_data, zoom=12)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Row 2: The Predictor Tool
+    # Row 2: Predictor Tool
     st.markdown('<div class="module-card">', unsafe_allow_html=True)
     st.markdown("### 🏢 Property Valuation Engine")
     
-    loc_name = st.selectbox("Location / Sector", [
-        "AGHOSH, Islamabad, Islamabad Capital", 
-        "DHA Phase 6, Lahore", 
-        "Bahria Town, Karachi",
-        "Gulberg, Islamabad"
-    ])
+    loc_name = st.selectbox("Location / Sector", ["AGHOSH, Islamabad, Islamabad Capital", "DHA Phase 6, Lahore", "Bahria Town, Karachi"])
     
     c1, c2, c3, c4 = st.columns(4)
     area = c1.number_input("Area (SqYd)", 1, 10000, 125, step=25)
@@ -140,20 +119,13 @@ with main_tab:
     baths = c3.number_input("Baths", 1, 15, 3)
     kitchens = c4.number_input("Kitchens", 1, 5, 1)
     
-    predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
-
-    if predict_btn:
-        # Mock calculation logic
-        base_price = area * 16500
-        extra_price = (beds * 450000) + (baths * 200000) + (kitchens * 350000)
-        total_val = base_price + extra_price
-        
+    if st.button("🚀 GENERATE HYBRID VALUATION"):
+        total_val = (area * 16500) + (beds * 450000) + (baths * 200000)
         st.balloons()
         st.markdown(f"""
             <div class="price-display">
                 <small style="color:#10b981; font-weight:bold;">AI MODEL VALUATION</small>
                 <h1 style="color:white; margin:0;">PKR {int(total_val):,}</h1>
-                <p style="color:#10b981; font-size:0.9rem;">Confidence Score: 94.2%</p>
             </div>
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -161,11 +133,10 @@ with main_tab:
 with hist_tab:
     st.markdown('<div class="module-card">', unsafe_allow_html=True)
     st.markdown("### 📜 Recent Valuation History")
-    # Using sample data for display
+    # Placeholder history
     hist_df = pd.DataFrame({
-        'Timestamp': ['2026-05-03 01:45', '2026-05-02 23:10'],
+        'Timestamp': ['2026-05-03 09:15', '2026-05-02 23:10'],
         'Location': [loc_name, 'DHA Phase 6, Lahore'],
-        'Area': [f"{area} SqYd", "250 SqYd"],
         'Valuation': ['PKR 3,975,000', 'PKR 8,450,000']
     })
     st.dataframe(hist_df, use_container_width=True)
