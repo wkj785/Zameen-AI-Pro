@@ -11,7 +11,7 @@ import statistics
 from database_manager import * 
 
 # --- 1. CORE COMPATIBILITY PATCHES ---
-# Ensures the model loaded from Colab is compatible with the local Streamlit environment
+# Required to bridge Scikit-learn versions between Colab and local environments
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
@@ -47,23 +47,33 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. ASSET LOADING ---
+# --- 3. LIVE PULSE & ASSET LOADING ---
+class ZameenPulse:
+    def get_live_market_avg(self, location, area_sqyd):
+        try:
+            time.sleep(0.3)
+            # Simulating market variance
+            mock_live_prices = [random.randint(90000, 110000) * (area_sqyd/125) for _ in range(5)]
+            return statistics.mean(mock_live_prices)
+        except: return None
+
 @st.cache_resource
 def load_assets():
     try:
-        # Load the pipeline exported from Colab
+        # Load the Pipeline object containing the Scaler and Encoder
         model_pipeline = joblib.load('house_price_model.joblib')
         
-        # Access the location list from the encoder inside the pipeline
+        # Access the location list from the encoder nested in the pipeline
         preprocessor = model_pipeline.named_steps['preprocessor']
         encoder = preprocessor.named_transformers_['Location_encoder']
         
+        # Internal patch for fitted ColumnTransformer attributes
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
             
         return model_pipeline, list(encoder.categories_[0])
     except Exception as e: 
-        st.error(f"Asset Error: {e}")
+        st.error(f"Asset Load Failure: {e}")
         return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
 model, locations = load_assets()
@@ -89,7 +99,8 @@ if not st.session_state.auth_status:
             nu = st.text_input("New Username", key="reg_u")
             npw = st.text_input("New Password", type="password", key="reg_p")
             if st.button("🆕 CREATE ACCOUNT"):
-                if add_userdata(nu, npw): st.success("Account created! Please login.")
+                if add_userdata(nu, npw):
+                    st.success("Account created! Please login.")
                 else: st.error("User already exists.")
     st.stop()
 
@@ -128,12 +139,13 @@ with main_tab:
             if res:
                 st.map(pd.DataFrame({'lat': [res.latitude], 'lon': [res.longitude]}), zoom=13)
             else: st.info("Map unavailable.")
-        except: st.info("Loading map...")
+        except: st.info("Map loading...")
 
     if predict_btn:
         if model:
             try:
-                # 1. Prepare raw input DataFrame (7 features total)
+                # 1. Provide RAW input to the pipeline
+                # Column names MUST match your training set exactly
                 input_df = pd.DataFrame({
                     'Location': [loc_name],
                     'Area': [area_sqyd],
@@ -144,30 +156,33 @@ with main_tab:
                     'Lounge or Sitting Room': [1]
                 })
 
-                # 2. Predict (Pipeline handles Encoder + Scaler internally)
+                # 2. Pipeline handles encoding and scaling internally
                 log_val = model.predict(input_df)[0]
                 
-                # 3. Reverse Log1p Transformation
+                # 3. Apply reverse Log1p transformation
                 ai_val = np.expm1(log_val)
                 
-                # 4. Market Sentiment Simulation
-                # Based on the AI prediction vs a randomized "Live" flux
-                live_avg = ai_val * random.uniform(0.95, 1.15)
-                diff = ((live_avg - ai_val) / ai_val) * 100
-                sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
+                # 4. Market Sentiment
+                pulse = ZameenPulse()
+                live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
+                sentiment = "Stable"
+                if live_avg:
+                    diff = ((live_avg - ai_val) / ai_val) * 100
+                    sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
 
                 # 5. UI Presentation
                 st.balloons()
                 st.markdown("### 💎 Hybrid Valuation Report")
                 res_l, res_r = st.columns(2)
                 res_l.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
-                res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
+                if live_avg:
+                    res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
                 
                 add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
             except Exception as e:
                 st.error(f"Prediction Error: {e}")
         else:
-            st.warning("Model 'house_price_model.joblib' not found.")
+            st.warning("Model file 'house_price_model.joblib' missing.")
 
 with hist_tab:
     df = view_user_history(st.session_state.username)
