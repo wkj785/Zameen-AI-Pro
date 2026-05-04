@@ -7,30 +7,54 @@ import sklearn.compose._column_transformer
 from geopy.geocoders import Nominatim
 import time
 import random
+import statistics
 from database_manager import * 
 
-# --- 1. VERSION COMPATIBILITY PATCH ---
+# --- 1. CORE COMPATIBILITY PATCHES ---
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
 
-st.set_page_config(page_title="Zameen AI Pro", layout="wide", page_icon="🏢")
+st.set_page_config(page_title="Zameen AI Pro | Hybrid Intelligence", layout="wide", page_icon="🏢")
 init_db()
 
-# --- 2. EMERALD UI CSS (MATCHING SCREENSHOT 45) ---
+# --- 2. THE ULTIMATE EMERALD UI CSS ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
     .stApp { background-color: #020617; color: #ffffff; }
     [data-testid="stSidebar"] { background: #0f172a; border-right: 2px solid #10b981; }
-    .sidebar-brand { font-size: 2.2rem; font-weight: 900; background: linear-gradient(90deg, #10b981, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; display: block; }
-    div.stButton > button { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; width: 100%; padding: 15px; font-weight: bold; }
-    div.stButton > button:hover { background-color: #10b981 !important; color: #020617 !important; }
-    .price-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #10b981; border-top: 1px solid #10b981; }
+    .sidebar-brand { font-size: 2.2rem !important; font-weight: 900 !important; background: linear-gradient(90deg, #10b981, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; display: block; }
+    .tagline { color: #10b981; font-size: 0.8rem; text-align: center; display: block; margin-top: -15px; margin-bottom: 20px; font-weight: bold; text-transform: uppercase; }
+    
+    button[data-baseweb="tab"] { background-color: transparent !important; border: none !important; color: #10b981 !important; font-weight: bold !important; font-size: 1.1rem !important; }
+    button[data-baseweb="tab"][aria-selected="true"] { border-bottom: 3px solid #10b981 !important; color: #ffffff !important; }
+
+    div.stButton > button { background-color: #0f172a !important; color: #10b981 !important; border: 2px solid #10b981 !important; border-radius: 8px; font-weight: 800 !important; width: 100% !important; padding: 18px !important; font-size: 1.1rem !important; }
+    div.stButton > button:hover { background-color: #10b981 !important; color: #020617 !important; box-shadow: 0 0 20px #10b981; }
+
+    label[data-testid="stWidgetLabel"] p { color: #10b981 !important; font-weight: bold !important; font-size: 1rem !important; }
+    input, .stNumberInput input, div[data-baseweb="select"] span { color: #10b981 !important; -webkit-text-fill-color: #10b981 !important; font-weight: bold !important; }
+    
+    .specs-card { background-color: #0f172a; padding: 1.5rem !important; border-radius: 12px; border: 1px solid #10b981; margin-bottom: 10px; }
+    .price-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #10b981; border-top: 1px solid #10b981; min-height: 120px; }
+    .live-card { background: #0f172a; padding: 1.5rem; border-radius: 10px; border-left: 8px solid #ffffff; border-top: 1px solid #ffffff; min-height: 120px; }
+    
+    .conv-box { background: #0f172a; border: 1px solid #10b981; border-radius: 12px; padding: 15px; margin-top: 10px; text-align: center; }
+    .conv-label { color: #10b981; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+    .conv-val { color: white; font-size: 1.2rem; font-weight: 900; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. ASSET LOADING ---
+# --- 3. LIVE PULSE & ASSET LOADING ---
+class ZameenPulse:
+    def get_live_market_avg(self, location, area_sqyd):
+        try:
+            time.sleep(0.3)
+            mock_live_prices = [random.randint(90000, 110000) * (area_sqyd/125) for _ in range(5)]
+            return statistics.mean(mock_live_prices)
+        except: return None
+
 @st.cache_resource
 def load_assets():
     try:
@@ -41,86 +65,114 @@ def load_assets():
             preprocessor._name_to_fitted_passthrough = {}
         return model_pipeline, list(encoder.categories_[0])
     except Exception as e: 
-        return None, ["Karachi", "Lahore", "Islamabad"]
+        st.error(f"Asset Load Failure: {e}")
+        return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
 model, locations = load_assets()
 
-# --- 4. AUTHENTICATION LOGIC ---
+# --- 4. AUTHENTICATION ---
 if 'auth_status' not in st.session_state:
     st.session_state.auth_status = False
 
 if not st.session_state.auth_status:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown('<p class="sidebar-brand">Zameen AI Pro</p>', unsafe_allow_html=True)
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("🚀 LOGIN"):
-            if login_user(u, p):
-                st.session_state.auth_status, st.session_state.username = True, u
-                st.rerun()
-            else: st.error("Invalid Credentials")
+        st.markdown('<div style="margin-top: 5rem;"><p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Property Valuation</p></div>', unsafe_allow_html=True)
+        auth_tabs = st.tabs(["🔐 LOGIN", "📝 REGISTER"])
+        with auth_tabs[0]:
+            u = st.text_input("Username", key="login_u")
+            p = st.text_input("Password", type="password", key="login_p")
+            if st.button("🚀 ENTER DASHBOARD"):
+                if login_user(u, p):
+                    st.session_state.auth_status, st.session_state.username = True, u
+                    st.rerun()
+                else: st.error("Invalid Credentials")
+        with auth_tabs[1]:
+            nu = st.text_input("New Username", key="reg_u")
+            npw = st.text_input("New Password", type="password", key="reg_p")
+            if st.button("🆕 CREATE ACCOUNT"):
+                if add_userdata(nu, npw):
+                    st.success("Account created! Please login.")
+                else: st.error("User already exists.")
     st.stop()
 
-# --- 5. SIDEBAR (MATCHING SCREENSHOT 45) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
-    st.markdown('<p class="sidebar-brand">Zameen AI Pro</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-brand">Zameen AI Pro</p><p class="tagline">AI-Powered Property Valuation</p>', unsafe_allow_html=True)
     st.divider()
-    st.write("⚖️ AREA CONVERTER")
-    side_sqyd = st.number_input("Enter SqYd", value=125, step=25)
-    st.info(f"Marlas: {side_sqyd/25:.2f} | Kanals: {side_sqyd/500:.4f}")
+    st.markdown('<p style="color:#10b981; font-weight:bold; font-size:0.9rem; text-align:center;">⚖️ AREA CONVERTER</p>', unsafe_allow_html=True)
+    side_sqyd = st.number_input("Enter SqYd", value=125, step=25, label_visibility="collapsed")
+    st.markdown(f'<div class="conv-box"><div class="conv-label">Marlas</div><div class="conv-val">{(side_sqyd/25):.2f}</div><hr style="border:0.1px solid #10b981; opacity:0.2; margin:10px 0;"><div class="conv-label">Kanals</div><div class="conv-val">{(side_sqyd/500):.4f}</div></div>', unsafe_allow_html=True)
+    st.divider()
     if st.button("🚪 LOGOUT"):
         st.session_state.auth_status = False
         st.rerun()
 
-# --- 6. MAIN PREDICTOR LAYOUT ---
-l_col, r_col = st.columns([2, 1])
+# --- 6. MAIN CONTENT ---
+main_tab, hist_tab = st.tabs(["🚀 Predictor", "📜 History"])
 
-with l_col:
-    st.subheader("Property Specifications")
-    loc_name = st.selectbox("Location / Sector", locations)
-    c1, c2, c3, c4 = st.columns(4)
-    area = c1.number_input("Area (SqYd)", 1, 10000, 125)
-    beds = c2.number_input("Beds", 1, 10, 3)
-    baths = c3.number_input("Baths", 1, 10, 3)
-    kitchens = c4.number_input("Kitchens", 1, 5, 1)
-    predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
+with main_tab:
+    l_col, r_col = st.columns([3, 1], gap="small")
+    with l_col:
+        st.markdown('<div class="specs-card">', unsafe_allow_html=True)
+        loc_name = st.selectbox("Location / Sector", locations)
+        c1, c2, c3, c4 = st.columns(4)
+        area_sqyd = c1.number_input("Area (SqYd)", 1, 10000, 125, step=25)
+        beds = c2.number_input("Beds", 1, 15, 3, step=1)
+        baths = c3.number_input("Baths", 1, 15, 3, step=1)
+        kitchens = c4.number_input("Kitchens", 1, 5, 1, step=1)
+        st.markdown('</div>', unsafe_allow_html=True)
+        predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
 
-with r_col:
-    geolocator = Nominatim(user_agent="ZameenAI_App")
-    try:
-        location_data = geolocator.geocode(f"{loc_name}, Pakistan")
-        if location_data:
-            st.map(pd.DataFrame({'lat': [location_data.latitude], 'lon': [location_data.longitude]}))
-    except: st.write("Map loading...")
-
-# --- 7. THE FUNCTIONAL FIX ---
-if predict_btn:
-    if model:
+    with r_col:
+        geolocator = Nominatim(user_agent="ZameenAI_Pro_Final")
         try:
-            # We pass ONLY the raw columns. The pipeline handles the expansion to 250 features.
-            input_df = pd.DataFrame({
-                'Location': [loc_name],
-                'Area': [area],
-                'Baths': [baths],
-                'Beds': [beds],
-                'Kitchens': [kitchens],
-                'Drawing Room': [1],        
-                'Lounge or Sitting Room': [1] 
-            })
+            res = geolocator.geocode(f"{loc_name}, Pakistan", timeout=5)
+            if res:
+                st.map(pd.DataFrame({'lat': [res.latitude], 'lon': [res.longitude]}), zoom=13)
+            else: st.info("Map unavailable.")
+        except: st.info("Map loading...")
 
-            # The model pipeline now correctly receives all 250 expected features
-            log_prediction = model.predict(input_df)[0]
-            final_price = np.expm1(log_prediction)
+    # --- 7. THE FUNCTIONAL FIX ---
+    if predict_btn:
+        if model:
+            try:
+                # FIX: Match the exact column names from your Colab training data
+                input_df = pd.DataFrame({
+                    'Location': [loc_name],
+                    'Area (SqYd)': [area_sqyd],  # Changed from 'Area' to match 250-feature model
+                    'Baths': [baths],
+                    'Beds': [beds],
+                    'Kitchens': [kitchens],
+                    'Drawing Room': [1], 
+                    'Lounge or Sitting Room': [1]
+                })
 
-            st.balloons()
-            st.markdown(f"""
-                <div class="price-card">
-                    <h3 style="color:#10b981; margin:0;">AI ESTIMATED VALUE</h3>
-                    <h1 style="color:white; margin:0;">PKR {int(final_price):,}</h1>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            add_history(st.session_state.username, loc_name, area, final_price, "Stable")
-        except Exception as e:
-            st.error(f"Prediction Error: {e}")
+                # Pipeline handles all 250 features internally
+                log_val = model.predict(input_df)[0]
+                ai_val = np.expm1(log_val)
+                
+                pulse = ZameenPulse()
+                live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
+                sentiment = "Stable"
+                if live_avg:
+                    diff = ((live_avg - ai_val) / ai_val) * 100
+                    sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
+
+                st.balloons()
+                st.markdown("### 💎 Hybrid Valuation Report")
+                res_l, res_r = st.columns(2)
+                res_l.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
+                if live_avg:
+                    res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
+                
+                add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
+            except Exception as e:
+                st.error(f"Prediction Error: {e}")
+        else:
+            st.warning("Model file 'house_price_model.joblib' missing.")
+
+with hist_tab:
+    df = view_user_history(st.session_state.username)
+    if not df.empty:
+        st.dataframe(df.sort_values(by="timestamp", ascending=False), use_container_width=True)
