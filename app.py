@@ -51,28 +51,25 @@ class ZameenPulse:
     def get_live_market_avg(self, location, area_sqyd):
         try:
             time.sleep(0.3)
-            # Simulating live variance around the area size
-            mock_live_prices = [random.randint(90000, 110000) * (area_sqyd/125) for _ in range(5)]
+            # Simulated variance for live market feel
+            mock_live_prices = [random.randint(95000, 115000) * (area_sqyd/125) for _ in range(5)]
             return statistics.mean(mock_live_prices)
         except: return None
 
 @st.cache_resource
 def load_assets():
     try:
-        # Load the optimized XGBoost Pipeline from Colab
         model = joblib.load('house_price_model.joblib')
-        
-        # Extract the preprocessor from the pipeline to get the location list
+        # Extract preprocessor from the XGBoost pipeline
         preprocessor = model.named_steps['preprocessor']
         encoder = preprocessor.named_transformers_['Location_encoder']
         
-        # Patch for internal sklearn consistency
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
             
         return model, list(encoder.categories_[0])
     except Exception as e: 
-        st.error(f"Error loading model: {e}")
+        st.error(f"Error loading model assets: {e}")
         return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
 model, locations = load_assets()
@@ -131,34 +128,33 @@ with main_tab:
         predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
 
     with r_col:
-        geolocator = Nominatim(user_agent="ZameenAI_Pro")
+        geolocator = Nominatim(user_agent="ZameenAI_Pro_App")
         try:
             res = geolocator.geocode(f"{loc_name}, Pakistan", timeout=5)
             if res:
                 st.map(pd.DataFrame({'lat': [res.latitude], 'lon': [res.longitude]}), zoom=13)
-            else: st.info("Map data unavailable.")
-        except: st.info("Syncing location...")
+            else: st.info("Map view unavailable.")
+        except: st.info("Loading map...")
 
     if predict_btn:
         if model:
             try:
-                # 1. Create Input DataFrame matching Colab columns
-                # Colab drop included: Dining, Laundry, Store, Gym, Powder, Steam, Prayer, No additional
+                # 1. Match the exact columns from Colab training
                 input_df = pd.DataFrame({
                     'Location': [loc_name],
                     'Area': [area_sqyd],
                     'Baths': [baths],
                     'Beds': [beds],
-                    'Kitchens': [kitchens]
+                    'Kitchens': [kitchens],
+                    'Drawing Room': [1], # Constant as it was in training
+                    'Lounge or Sitting Room': [1] # Constant as it was in training
                 })
 
-                # 2. Predict (This returns the log value)
+                # 2. Predict & Reverse Log
                 log_val = model.predict(input_df)[0]
+                ai_val = np.expm1(log_val) 
                 
-                # 3. Reverse Log Transformation to get actual PKR
-                ai_val = np.expm1(log_val)
-                
-                # 4. Live Pulse Logic
+                # 3. Market Pulse Logic
                 pulse = ZameenPulse()
                 live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
                 
@@ -167,11 +163,12 @@ with main_tab:
                     diff = ((live_avg - ai_val) / ai_val) * 100
                     sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
 
-                # 5. UI Display
+                # 4. Result UI
                 st.balloons()
                 st.markdown("### 💎 Hybrid Valuation Report")
                 res_l, res_r = st.columns(2)
                 res_l.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
+                
                 if live_avg:
                     res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
                 
@@ -179,7 +176,7 @@ with main_tab:
             except Exception as e:
                 st.error(f"Prediction Error: {e}")
         else:
-            st.warning("Model file not found. Please upload 'house_price_model.joblib'.")
+            st.warning("Please upload 'house_price_model.joblib' to your root folder.")
 
 with hist_tab:
     df = view_user_history(st.session_state.username)
