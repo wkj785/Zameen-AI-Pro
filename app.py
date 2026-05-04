@@ -46,7 +46,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LIVE PULSE & ASSET LOADING ---
+# --- 3. ASSET LOADING ---
 class ZameenPulse:
     def get_live_market_avg(self, location, area_sqyd):
         try:
@@ -65,7 +65,6 @@ def load_assets():
             preprocessor._name_to_fitted_passthrough = {}
         return model_pipeline, list(encoder.categories_[0])
     except Exception as e: 
-        st.error(f"Asset Load Failure: {e}")
         return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
 model, locations = load_assets()
@@ -133,14 +132,14 @@ with main_tab:
             else: st.info("Map unavailable.")
         except: st.info("Map loading...")
 
-    # --- 7. THE FUNCTIONAL FIX ---
+    # --- 7. PREDICTION ENGINE (THE FIX) ---
     if predict_btn:
         if model:
             try:
-                # FIX: Match the exact column names from your Colab training data
+                # UPDATED: Column name changed back to 'Area' to fix the Prediction Error
                 input_df = pd.DataFrame({
                     'Location': [loc_name],
-                    'Area (SqYd)': [area_sqyd],  # Changed from 'Area' to match 250-feature model
+                    'Area': [area_sqyd],  # Changed from 'Area (SqYd)' to 'Area'
                     'Baths': [baths],
                     'Beds': [beds],
                     'Kitchens': [kitchens],
@@ -148,7 +147,6 @@ with main_tab:
                     'Lounge or Sitting Room': [1]
                 })
 
-                # Pipeline handles all 250 features internally
                 log_val = model.predict(input_df)[0]
                 ai_val = np.expm1(log_val)
                 
@@ -170,7 +168,7 @@ with main_tab:
             except Exception as e:
                 st.error(f"Prediction Error: {e}")
         else:
-            st.warning("Model file 'house_price_model.joblib' missing.")
+            st.warning("Model file missing.")
 
 with hist_tab:
     df = view_user_history(st.session_state.username)
