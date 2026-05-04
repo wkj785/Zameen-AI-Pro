@@ -60,10 +60,14 @@ def load_assets():
     try:
         model_pipeline = joblib.load('house_price_model.joblib')
         preprocessor = model_pipeline.named_steps['preprocessor']
+        # Extract the exact categories the model was trained on
         encoder = preprocessor.named_transformers_['Location_encoder']
+        trained_locations = list(encoder.categories_[0])
+        
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
-        return model_pipeline, list(encoder.categories_[0])
+            
+        return model_pipeline, trained_locations
     except Exception as e: 
         return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
@@ -132,14 +136,14 @@ with main_tab:
             else: st.info("Map unavailable.")
         except: st.info("Map loading...")
 
-    # --- 7. PREDICTION ENGINE (THE FIX) ---
+    # --- 7. PREDICTION ENGINE (THE 250 FEATURE FIX) ---
     if predict_btn:
         if model:
             try:
-                # UPDATED: Column name changed back to 'Area' to fix the Prediction Error
+                # STEP 1: Create DataFrame with EXACT training names
                 input_df = pd.DataFrame({
                     'Location': [loc_name],
-                    'Area': [area_sqyd],  # Changed from 'Area (SqYd)' to 'Area'
+                    'Area': [area_sqyd],
                     'Baths': [baths],
                     'Beds': [beds],
                     'Kitchens': [kitchens],
@@ -147,6 +151,11 @@ with main_tab:
                     'Lounge or Sitting Room': [1]
                 })
 
+                # STEP 2: FORCE categorical type to include ALL 250 trained locations
+                # This ensures the OneHotEncoder produces exactly 250 features
+                input_df['Location'] = pd.Categorical(input_df['Location'], categories=locations)
+
+                # STEP 3: Predict using the full pipeline
                 log_val = model.predict(input_df)[0]
                 ai_val = np.expm1(log_val)
                 
@@ -166,7 +175,7 @@ with main_tab:
                 
                 add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
             except Exception as e:
-                st.error(f"Prediction Error: {e}")
+                st.error(f"Feature Mismatch Error: {e}")
         else:
             st.warning("Model file missing.")
 
