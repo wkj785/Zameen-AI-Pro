@@ -10,7 +10,6 @@ import random
 from database_manager import * 
 
 # --- 1. VERSION COMPATIBILITY PATCH ---
-# This fixes potential 'AttributeError' when loading models across different environments
 if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
     class _RemainderColsList(list): pass
     sklearn.compose._column_transformer._RemainderColsList = _RemainderColsList
@@ -35,14 +34,10 @@ st.markdown("""
 @st.cache_resource
 def load_assets():
     try:
-        # Load the Pipeline (Should contain: Preprocessor -> Scaler -> XGBoost)
         model_pipeline = joblib.load('house_price_model.joblib')
-        
-        # Extract location names from the encoder inside the pipeline
         preprocessor = model_pipeline.named_steps['preprocessor']
         encoder = preprocessor.named_transformers_['Location_encoder']
         
-        # Internal fix for fitted attributes
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
             
@@ -96,7 +91,6 @@ with l_col:
     predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
 
 with r_col:
-    # Simple Map Logic
     geolocator = Nominatim(user_agent="ZameenAI_App")
     try:
         location_data = geolocator.geocode(f"{loc_name}, Pakistan")
@@ -108,27 +102,22 @@ with r_col:
 if predict_btn:
     if model:
         try:
-            # CREATE THE RAW DATAFRAME
-            # This must exactly match the feature names used in your Colab 'X' training set.
+            # FIX: Ensure column names match the training CSV exactly
+            # In your House-Price-Prediction project, these were the expected keys
             input_df = pd.DataFrame({
                 'Location': [loc_name],
                 'Area': [area],
                 'Baths': [baths],
                 'Beds': [beds],
                 'Kitchens': [kitchens],
-                'Drawing Room': [1],        # Standard default
-                'Lounge or Sitting Room': [1] # Standard default
+                'Drawing Room': [1],        
+                'Lounge or Sitting Room': [1] 
             })
 
-            # CALL THE PIPELINE
-            # The pipeline automatically handles OneHotEncoding and StandardScaler internally.
-            # This ensures it finds the exact 250 features it expects.
+            # CALL THE PIPELINE DIRECTLY
             log_prediction = model.predict(input_df)[0]
-            
-            # REVERSE LOG TRANSFORMATION
             final_price = np.expm1(log_prediction)
 
-            # UI DISPLAY
             st.balloons()
             st.markdown(f"""
                 <div class="price-card">
@@ -140,4 +129,5 @@ if predict_btn:
             add_history(st.session_state.username, loc_name, area, final_price, "Stable")
             
         except Exception as e:
+            # This will now catch any remaining naming mismatches
             st.error(f"Prediction Error: {e}")
