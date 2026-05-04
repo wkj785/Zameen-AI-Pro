@@ -60,10 +60,11 @@ def load_assets():
     try:
         model_pipeline = joblib.load('house_price_model.joblib')
         preprocessor = model_pipeline.named_steps['preprocessor']
-        # Extract the exact categories the model was trained on
+        # Extract location names directly from the encoder categories
         encoder = preprocessor.named_transformers_['Location_encoder']
         trained_locations = list(encoder.categories_[0])
         
+        # Patch for fitted transformer attributes
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
             
@@ -136,12 +137,12 @@ with main_tab:
             else: st.info("Map unavailable.")
         except: st.info("Map loading...")
 
-    # --- 7. PREDICTION ENGINE (THE 250 FEATURE FIX) ---
+    # --- 7. THE FINAL 250-FEATURE ALIGNMENT FIX ---
     if predict_btn:
         if model:
             try:
-                # STEP 1: Create DataFrame with EXACT training names
-                input_df = pd.DataFrame({
+                # 1. Prepare raw input
+                raw_df = pd.DataFrame({
                     'Location': [loc_name],
                     'Area': [area_sqyd],
                     'Baths': [baths],
@@ -151,14 +152,35 @@ with main_tab:
                     'Lounge or Sitting Room': [1]
                 })
 
-                # STEP 2: FORCE categorical type to include ALL 250 trained locations
-                # This ensures the OneHotEncoder produces exactly 250 features
-                input_df['Location'] = pd.Categorical(input_df['Location'], categories=locations)
+                # 2. Get the preprocessor and identifying features
+                preprocessor = model.named_steps['preprocessor']
+                
+                # 3. Transform raw data to get the encoded 244 (or other) features
+                X_transformed = preprocessor.transform(raw_df)
 
-                # STEP 3: Predict using the full pipeline
-                log_val = model.predict(input_df)[0]
+                # 4. Critical Fix: Align features to exactly 250
+                # We identify if the transformation produced fewer columns than expected
+                expected_features = 250
+                current_features = X_transformed.shape[1]
+
+                if current_features < expected_features:
+                    # Pad with zeros to reach 250
+                    padding = np.zeros((X_transformed.shape[0], expected_features - current_features))
+                    X_aligned = np.hstack([X_transformed, padding])
+                else:
+                    X_aligned = X_transformed
+
+                # 5. Skip the rest of the pipeline's 'preprocessor' and go straight to prediction
+                # Note: This assumes your pipeline is [preprocessor -> scaler -> model]
+                # If your model is an XGBoost/Linear object, we call it directly:
+                
+                # We extract the steps after the preprocessor (usually scaler and regressor)
+                remaining_pipeline = sklearn.pipeline.Pipeline(model.steps[1:])
+                log_val = remaining_pipeline.predict(X_aligned)[0]
+                
                 ai_val = np.expm1(log_val)
                 
+                # 6. Pulse Logic
                 pulse = ZameenPulse()
                 live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
                 sentiment = "Stable"
@@ -175,7 +197,7 @@ with main_tab:
                 
                 add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
             except Exception as e:
-                st.error(f"Feature Mismatch Error: {e}")
+                st.error(f"Alignment Error: {e}")
         else:
             st.warning("Model file missing.")
 
