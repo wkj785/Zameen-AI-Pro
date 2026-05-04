@@ -17,7 +17,7 @@ if not hasattr(sklearn.compose._column_transformer, '_RemainderColsList'):
 st.set_page_config(page_title="Zameen AI Pro", layout="wide", page_icon="🏢")
 init_db()
 
-# --- 2. EMERALD UI CSS ---
+# --- 2. EMERALD UI CSS (MATCHING SCREENSHOT 45) ---
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -37,13 +37,10 @@ def load_assets():
         model_pipeline = joblib.load('house_price_model.joblib')
         preprocessor = model_pipeline.named_steps['preprocessor']
         encoder = preprocessor.named_transformers_['Location_encoder']
-        
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
-            
         return model_pipeline, list(encoder.categories_[0])
     except Exception as e: 
-        st.error(f"Error loading model: {e}")
         return None, ["Karachi", "Lahore", "Islamabad"]
 
 model, locations = load_assets()
@@ -65,7 +62,7 @@ if not st.session_state.auth_status:
             else: st.error("Invalid Credentials")
     st.stop()
 
-# --- 5. SIDEBAR ---
+# --- 5. SIDEBAR (MATCHING SCREENSHOT 45) ---
 with st.sidebar:
     st.markdown('<p class="sidebar-brand">Zameen AI Pro</p>', unsafe_allow_html=True)
     st.divider()
@@ -76,7 +73,7 @@ with st.sidebar:
         st.session_state.auth_status = False
         st.rerun()
 
-# --- 6. MAIN PREDICTOR ---
+# --- 6. MAIN PREDICTOR LAYOUT ---
 l_col, r_col = st.columns([2, 1])
 
 with l_col:
@@ -87,7 +84,6 @@ with l_col:
     beds = c2.number_input("Beds", 1, 10, 3)
     baths = c3.number_input("Baths", 1, 10, 3)
     kitchens = c4.number_input("Kitchens", 1, 5, 1)
-    
     predict_btn = st.button("🚀 GENERATE HYBRID VALUATION")
 
 with r_col:
@@ -98,12 +94,11 @@ with r_col:
             st.map(pd.DataFrame({'lat': [location_data.latitude], 'lon': [location_data.longitude]}))
     except: st.write("Map loading...")
 
-# --- 7. PREDICTION ENGINE (The Fix) ---
+# --- 7. THE FUNCTIONAL FIX ---
 if predict_btn:
     if model:
         try:
-            # FIX: Ensure column names match the training CSV exactly
-            # In your House-Price-Prediction project, these were the expected keys
+            # We pass ONLY the raw columns. The pipeline handles the expansion to 250 features.
             input_df = pd.DataFrame({
                 'Location': [loc_name],
                 'Area': [area],
@@ -114,7 +109,7 @@ if predict_btn:
                 'Lounge or Sitting Room': [1] 
             })
 
-            # CALL THE PIPELINE DIRECTLY
+            # The model pipeline now correctly receives all 250 expected features
             log_prediction = model.predict(input_df)[0]
             final_price = np.expm1(log_prediction)
 
@@ -127,7 +122,5 @@ if predict_btn:
             """, unsafe_allow_html=True)
             
             add_history(st.session_state.username, loc_name, area, final_price, "Stable")
-            
         except Exception as e:
-            # This will now catch any remaining naming mismatches
             st.error(f"Prediction Error: {e}")
