@@ -46,30 +46,39 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. ASSET LOADING ---
+# --- 3. ASSET LOADING & PULSE LOGIC ---
 class ZameenPulse:
-    def get_live_market_avg(self, location, area_sqyd):
-        try:
-            time.sleep(0.3)
-            mock_live_prices = [random.randint(90000, 110000) * (area_sqyd/125) for _ in range(5)]
-            return statistics.mean(mock_live_prices)
-        except: return None
+    def get_market_pulse(self, predicted_price):
+        """Integrated Market Pulse Logic with 4% Thresholding"""
+        # Simulated volatility between -10% and +10%
+        volatility_factor = np.random.uniform(-0.10, 0.10) 
+        market_deviation_pkr = predicted_price * volatility_factor
+        
+        if volatility_factor > 0.04:
+            status = "Hot Market Trend"
+            icon = "🔥"
+        elif volatility_factor < -0.04:
+            status = "Cool Market Trend"
+            icon = "❄️"
+        else:
+            status = "Stable Market Trend"
+            icon = "⚖️"
+            
+        return status, abs(market_deviation_pkr), icon
 
 @st.cache_resource
 def load_assets():
     try:
         model_pipeline = joblib.load('house_price_model.joblib')
         preprocessor = model_pipeline.named_steps['preprocessor']
-        # Extract location names directly from the encoder categories
         encoder = preprocessor.named_transformers_['Location_encoder']
         trained_locations = list(encoder.categories_[0])
         
-        # Patch for fitted transformer attributes
         if not hasattr(preprocessor, '_name_to_fitted_passthrough'):
             preprocessor._name_to_fitted_passthrough = {}
             
         return model_pipeline, trained_locations
-    except Exception as e: 
+    except Exception: 
         return None, ["DHA Phase 6", "Bahria Town", "Gulberg Islamabad"]
 
 model, locations = load_assets()
@@ -137,67 +146,59 @@ with main_tab:
             else: st.info("Map unavailable.")
         except: st.info("Map loading...")
 
-    # --- 7. THE FINAL 250-FEATURE ALIGNMENT FIX ---
+    # --- 7. PREDICTION & HYBRID LOGIC ---
     if predict_btn:
         if model:
             try:
-                # 1. Prepare raw input
                 raw_df = pd.DataFrame({
-                    'Location': [loc_name],
-                    'Area': [area_sqyd],
-                    'Baths': [baths],
-                    'Beds': [beds],
-                    'Kitchens': [kitchens],
-                    'Drawing Room': [1], 
+                    'Location': [loc_name], 'Area': [area_sqyd], 'Baths': [baths],
+                    'Beds': [beds], 'Kitchens': [kitchens], 'Drawing Room': [1], 
                     'Lounge or Sitting Room': [1]
                 })
 
-                # 2. Get the preprocessor and identifying features
+                # Feature Alignment (250 Features)
                 preprocessor = model.named_steps['preprocessor']
-                
-                # 3. Transform raw data to get the encoded 244 (or other) features
                 X_transformed = preprocessor.transform(raw_df)
-
-                # 4. Critical Fix: Align features to exactly 250
-                # We identify if the transformation produced fewer columns than expected
                 expected_features = 250
                 current_features = X_transformed.shape[1]
 
                 if current_features < expected_features:
-                    # Pad with zeros to reach 250
                     padding = np.zeros((X_transformed.shape[0], expected_features - current_features))
                     X_aligned = np.hstack([X_transformed, padding])
                 else:
                     X_aligned = X_transformed
 
-                # 5. Skip the rest of the pipeline's 'preprocessor' and go straight to prediction
-                # Note: This assumes your pipeline is [preprocessor -> scaler -> model]
-                # If your model is an XGBoost/Linear object, we call it directly:
-                
-                # We extract the steps after the preprocessor (usually scaler and regressor)
+                # Predict Price
                 remaining_pipeline = sklearn.pipeline.Pipeline(model.steps[1:])
                 log_val = remaining_pipeline.predict(X_aligned)[0]
-                
                 ai_val = np.expm1(log_val)
                 
-                # 6. Pulse Logic
-                pulse = ZameenPulse()
-                live_avg = pulse.get_live_market_avg(loc_name, area_sqyd)
-                sentiment = "Stable"
-                if live_avg:
-                    diff = ((live_avg - ai_val) / ai_val) * 100
-                    sentiment = "Hot" if diff > 5 else "Stable" if diff > -5 else "Cool"
+                # --- APPLY INTEGRATED PULSE LOGIC ---
+                pulse_engine = ZameenPulse()
+                sentiment, pulse_value, icon = pulse_engine.get_market_pulse(ai_val)
 
                 st.balloons()
                 st.markdown("### 💎 Hybrid Valuation Report")
                 res_l, res_r = st.columns(2)
-                res_l.markdown(f'<div class="price-card"><small style="color:#10b981;">AI MODEL VALUATION</small><h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2></div>', unsafe_allow_html=True)
-                if live_avg:
-                    res_r.markdown(f'<div class="live-card"><small style="color:#10b981;">LIVE MARKET PULSE</small><h2 style="color:white;margin:0;">PKR {int(live_avg):,}</h2><p style="color:#10b981;margin:0;">{sentiment} Market Trend</p></div>', unsafe_allow_html=True)
+                
+                # Column 1: AI Result
+                res_l.markdown(f'''
+                    <div class="price-card">
+                        <small style="color:#10b981;">AI MODEL VALUATION</small>
+                        <h2 style="color:white;margin:0;">PKR {int(ai_val):,}</h2>
+                    </div>''', unsafe_allow_html=True)
+                
+                # Column 2: Market Pulse Result (Matches Screenshot (49).png)
+                res_r.markdown(f'''
+                    <div class="live-card">
+                        <small style="color:#10b981;">LIVE MARKET PULSE</small>
+                        <h2 style="color:white;margin:0;">PKR {int(pulse_value):,}</h2>
+                        <p style="color:#10b981;margin:0;">{icon} {sentiment}</p>
+                    </div>''', unsafe_allow_html=True)
                 
                 add_history(st.session_state.username, loc_name, area_sqyd, ai_val, sentiment)
             except Exception as e:
-                st.error(f"Alignment Error: {e}")
+                st.error(f"Error: {e}")
         else:
             st.warning("Model file missing.")
 
